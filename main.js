@@ -1,7 +1,7 @@
 const { Plugin, PluginSettingTab, Setting, Notice, Modal, FuzzySuggestModal, TFolder } = require('obsidian');
 
 const DEFAULT_SETTINGS = {
-  convertOnPaste: false,
+  convertOnPaste: true,
   showNotices: true,
   backupBatch: true,
 };

@@ -44,7 +44,7 @@ Open the command palette (Ctrl/Cmd+P) and search for "AI Math Paste" or the name
 
 ## Settings
 
-- **Convert on paste** (off by default): converts pasted text that contains `\( \)` or `\[ \]`. Formatting from rich-text sources is not kept.
+- **Convert on paste** (on by default): converts pasted text that contains `\( \)` or `\[ \]`. Formatting from rich-text sources is not kept.
 - **Show notices** (on by default): shows how many formulas were converted.
 - **Back up files before batch conversion** (on by default): see Backups below.
 - **Clear batch backups:** button that deletes all saved backups, after confirmation.
