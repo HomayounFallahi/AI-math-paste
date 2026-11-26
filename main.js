@@ -64,6 +64,14 @@ function convert(md) {
   return { out: head + body, count };
 }
 
+// Pasted text often has a blank line between list items (bullets or numbers), which makes the
+// list loose. Normalizes line endings and removes blank lines that sit between two list items.
+const LIST_BLANKS = /^([ \t]*(?:[-*+]|\d+[.)])[ \t][^\n]*)\n(?:[ \t]*\n)+(?=[ \t]*(?:[-*+]|\d+[.)])[ \t])/gm;
+
+function tidyPastedLists(text) {
+  return text.replace(/\r\n?/g, '\n').replace(LIST_BLANKS, '$1\n');
+}
+
 // Replaces only the changed middle of the note, so the cursor and scroll position survive
 // and the whole conversion is one undo step.
 function applyChange(editor, oldText, newText) {
@@ -213,11 +221,12 @@ module.exports = class LatexDelimiterConvert extends Plugin {
         if (!this.settings.convertOnPaste || evt.defaultPrevented) return;
         const pasted = evt.clipboardData?.getData('text/plain');
         if (!pasted) return;
-        const { out, count } = convert(pasted);
-        if (!count) return;
+        const tidied = tidyPastedLists(pasted);
+        const { out, count } = convert(tidied);
+        if (!count && tidied === pasted) return; // nothing to change: let Obsidian paste as usual
         evt.preventDefault();
         editor.replaceSelection(out);
-        this.report(count);
+        if (count) this.report(count);
       })
     );
 
