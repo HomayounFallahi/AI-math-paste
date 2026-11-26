@@ -216,17 +216,12 @@ module.exports = class LatexDelimiterConvert extends Plugin {
     });
 
     // Converts pasted text when the option is enabled. Zero matches leave the paste untouched and silent.
+    // Obsidian pastes as usual, so list nesting follows the cursor. Then only the pasted text is cleaned up.
     this.registerEvent(
       this.app.workspace.on('editor-paste', (evt, editor) => {
         if (!this.settings.convertOnPaste || evt.defaultPrevented) return;
-        const pasted = evt.clipboardData?.getData('text/plain');
-        if (!pasted) return;
-        const tidied = tidyPastedLists(pasted);
-        const { out, count } = convert(tidied);
-        if (!count && tidied === pasted) return; // nothing to change: let Obsidian paste as usual
-        evt.preventDefault();
-        editor.replaceSelection(out);
-        if (count) this.report(count);
+        const start = editor.getCursor('from');
+        setTimeout(() => this.cleanupPaste(editor, start), 0);
       })
     );
 
@@ -317,6 +312,17 @@ module.exports = class LatexDelimiterConvert extends Plugin {
       cur = cur ? `${cur}/${part}` : part;
       if (!(await adapter.exists(cur))) await adapter.mkdir(cur);
     }
+  }
+
+  // Runs after a paste: removes blank lines between list items and converts math in the pasted text only.
+  cleanupPaste(editor, start) {
+    const end = editor.getCursor();
+    if (end.line < start.line || (end.line === start.line && end.ch <= start.ch)) return;
+    const before = editor.getRange(start, end);
+    const { out, count } = convert(tidyPastedLists(before));
+    if (out === before) return;
+    editor.transaction({ changes: [{ from: start, to: end, text: out }] });
+    if (count) this.report(count);
   }
 
   backupsDir() {
