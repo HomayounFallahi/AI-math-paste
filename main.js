@@ -64,43 +64,6 @@ function convert(md) {
   return { out: head + body, count };
 }
 
-// Pasted text often has a blank line between list items (bullets or numbers), which makes the
-// list loose. Normalizes line endings and removes blank lines that sit between two list items.
-const LIST_BLANKS = /^([ \t]*(?:[-*+]|\d+[.)])[ \t][^\n]*)\n(?:[ \t]*\n)+(?=[ \t]*(?:[-*+]|\d+[.)])[ \t])/gm;
-
-const LIST_ITEM = /^([ \t]*)(?:[-*+]|\d+[.)])[ \t]/;
-
-function indentWidth(ws) {
-  return ws.replace(/\t/g, '    ').length;
-}
-
-// Rebuilds list indentation from nesting depth, 4 spaces per level (Obsidian's default), so
-// nested items sit under their parent whatever indentation the source used (2, 3, or tabs).
-// The first line's indentation is kept as the base, so a paste into a list keeps its level.
-function normalizeListIndent(text) {
-  const lines = text.split('\n');
-  const firstMatch = LIST_ITEM.exec(lines[0]);
-  const base = firstMatch ? firstMatch[1] : '';
-  const stack = firstMatch ? [indentWidth(base)] : [];
-  return lines.map((line, i) => {
-    if (i === 0 || line.trim() === '') return line;
-    const m = LIST_ITEM.exec(line);
-    if (!m) {
-      if (!/^[ \t]/.test(line)) stack.length = 0; // a new paragraph ends the list
-      return line;
-    }
-    const width = indentWidth(m[1]);
-    while (stack.length && stack[stack.length - 1] > width) stack.pop();
-    if (!stack.length || stack[stack.length - 1] < width) stack.push(width);
-    const depth = stack.length - 1;
-    return base + '    '.repeat(depth) + line.slice(m[1].length);
-  }).join('\n');
-}
-
-function tidyPastedLists(text) {
-  return normalizeListIndent(text.replace(/\r\n?/g, '\n').replace(LIST_BLANKS, '$1\n'));
-}
-
 // Replaces only the changed middle of the note, so the cursor and scroll position survive
 // and the whole conversion is one undo step.
 function applyChange(editor, oldText, newText) {
@@ -245,12 +208,16 @@ module.exports = class LatexDelimiterConvert extends Plugin {
     });
 
     // Converts pasted text when the option is enabled. Zero matches leave the paste untouched and silent.
-    // Obsidian pastes as usual, so list nesting follows the cursor. Then only the pasted text is cleaned up.
     this.registerEvent(
       this.app.workspace.on('editor-paste', (evt, editor) => {
         if (!this.settings.convertOnPaste || evt.defaultPrevented) return;
-        const start = editor.getCursor('from');
-        setTimeout(() => this.cleanupPaste(editor, start), 0);
+        const pasted = evt.clipboardData?.getData('text/plain');
+        if (!pasted) return;
+        const { out, count } = convert(pasted);
+        if (!count) return;
+        evt.preventDefault();
+        editor.replaceSelection(out);
+        this.report(count);
       })
     );
 
@@ -341,17 +308,6 @@ module.exports = class LatexDelimiterConvert extends Plugin {
       cur = cur ? `${cur}/${part}` : part;
       if (!(await adapter.exists(cur))) await adapter.mkdir(cur);
     }
-  }
-
-  // Runs after a paste: removes blank lines between list items and converts math in the pasted text only.
-  cleanupPaste(editor, start) {
-    const end = editor.getCursor();
-    if (end.line < start.line || (end.line === start.line && end.ch <= start.ch)) return;
-    const before = editor.getRange(start, end);
-    const { out, count } = convert(tidyPastedLists(before));
-    if (out === before) return;
-    editor.transaction({ changes: [{ from: start, to: end, text: out }] });
-    if (count) this.report(count);
   }
 
   backupsDir() {
