@@ -68,8 +68,37 @@ function convert(md) {
 // list loose. Normalizes line endings and removes blank lines that sit between two list items.
 const LIST_BLANKS = /^([ \t]*(?:[-*+]|\d+[.)])[ \t][^\n]*)\n(?:[ \t]*\n)+(?=[ \t]*(?:[-*+]|\d+[.)])[ \t])/gm;
 
+const LIST_ITEM = /^([ \t]*)(?:[-*+]|\d+[.)])[ \t]/;
+
+function indentWidth(ws) {
+  return ws.replace(/\t/g, '    ').length;
+}
+
+// Rebuilds list indentation from nesting depth, 4 spaces per level (Obsidian's default), so
+// nested items sit under their parent whatever indentation the source used (2, 3, or tabs).
+// The first line's indentation is kept as the base, so a paste into a list keeps its level.
+function normalizeListIndent(text) {
+  const lines = text.split('\n');
+  const firstMatch = LIST_ITEM.exec(lines[0]);
+  const base = firstMatch ? firstMatch[1] : '';
+  const stack = firstMatch ? [indentWidth(base)] : [];
+  return lines.map((line, i) => {
+    if (i === 0 || line.trim() === '') return line;
+    const m = LIST_ITEM.exec(line);
+    if (!m) {
+      if (!/^[ \t]/.test(line)) stack.length = 0; // a new paragraph ends the list
+      return line;
+    }
+    const width = indentWidth(m[1]);
+    while (stack.length && stack[stack.length - 1] > width) stack.pop();
+    if (!stack.length || stack[stack.length - 1] < width) stack.push(width);
+    const depth = stack.length - 1;
+    return base + '    '.repeat(depth) + line.slice(m[1].length);
+  }).join('\n');
+}
+
 function tidyPastedLists(text) {
-  return text.replace(/\r\n?/g, '\n').replace(LIST_BLANKS, '$1\n');
+  return normalizeListIndent(text.replace(/\r\n?/g, '\n').replace(LIST_BLANKS, '$1\n'));
 }
 
 // Replaces only the changed middle of the note, so the cursor and scroll position survive
